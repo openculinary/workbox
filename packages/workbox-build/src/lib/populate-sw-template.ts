@@ -6,7 +6,7 @@
   https://opensource.org/licenses/MIT.
 */
 
-import {Eta} from 'eta';
+import template from 'lodash/template';
 
 import {errors} from './errors';
 import {GeneratePartial, ManifestEntry} from '../types';
@@ -14,11 +14,6 @@ import {ModuleRegistry} from './module-registry';
 import {runtimeCachingConverter} from './runtime-caching-converter';
 import {stringifyWithoutComments} from './stringify-without-comments';
 import {swTemplate} from '../templates/sw-template';
-
-const eta = new Eta({
-  useWith: true,
-  autoEscape: false,
-})
 
 export function populateSWTemplate({
   cacheId,
@@ -77,7 +72,7 @@ export function populateSWTemplate({
   const moduleRegistry = new ModuleRegistry();
 
   try {
-    const populatedTemplate = eta.renderString(swTemplate, {
+    const populatedTemplate = template(swTemplate)({
       cacheId,
       cleanupOutdatedCaches,
       clientsClaim,

@@ -19,14 +19,9 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
   it(`should throw an error if templating fails`, function () {
     const manifestEntries = ['ignored'];
 
-    // Mock the Eta class and its renderString method to throw an error
     const {populateSWTemplate} = proxyquire(MODULE_PATH, {
-      'eta': {
-        Eta: class {
-          renderString() {
-            throw new Error();
-          }
-        },
+      'lodash/template': () => {
+        throw new Error();
       },
     });
 
@@ -40,11 +35,7 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
 
   it(`should throw an error if both manifestEntries and runtimeCaching are empty`, function () {
     const {populateSWTemplate} = proxyquire(MODULE_PATH, {
-      'eta': {
-        Eta: class {
-          renderString() {}
-        },
-      },
+      'lodash/template': () => {},
     });
 
     try {
@@ -63,16 +54,10 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
     const precacheOptionsString = '{}';
     const manifestEntries = ['ignored'];
 
-    // Create a single stub to simulate renderString
-    const renderStringStub = sinon.stub().returns('');
+    const innerStub = sinon.stub().returns('');
+    const outerStub = sinon.stub().returns(innerStub);
     const {populateSWTemplate} = proxyquire(MODULE_PATH, {
-      'eta': {
-        Eta: class {
-          constructor() {
-            this.renderString = renderStringStub;
-          }
-        },
-      },
+      'lodash/template': outerStub,
       './runtime-caching-converter': {
         runtimeCachingConverter: () => runtimeCachingPlaceholder,
       },
@@ -81,30 +66,30 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
 
     populateSWTemplate({manifestEntries});
 
-    // Eta receives the template as the first argument: args[0][0]
-    expect(renderStringStub.args[0][0]).to.equal(swTemplate);
+    expect(outerStub.alwaysCalledWith(swTemplate)).to.be.true;
 
-    // The data is passed as the second argument: args[0][1]
-    expect(renderStringStub.args[0][1].use).to.be.a('function');
-    delete renderStringStub.args[0][1].use;
+    // Doing a strict comparison with functions isn't easy.
+    expect(innerStub.args[0][0].use).to.be.a('function');
+    delete innerStub.args[0][0].use;
 
-    // Compare the data object directly
-    expect(renderStringStub.args[0][1]).to.eql({
-      manifestEntries,
-      cacheId: undefined,
-      cleanupOutdatedCaches: undefined,
-      clientsClaim: undefined,
-      disableDevLogs: undefined,
-      importScripts: undefined,
-      navigateFallback: undefined,
-      navigateFallbackDenylist: undefined,
-      navigateFallbackAllowlist: undefined,
-      navigationPreload: undefined,
-      offlineAnalyticsConfigString: undefined,
-      precacheOptionsString,
-      runtimeCaching: runtimeCachingPlaceholder,
-      skipWaiting: undefined,
-    });
+    expect(innerStub.args[0]).to.eql([
+      {
+        manifestEntries,
+        cacheId: undefined,
+        cleanupOutdatedCaches: undefined,
+        clientsClaim: undefined,
+        disableDevLogs: undefined,
+        importScripts: undefined,
+        navigateFallback: undefined,
+        navigateFallbackDenylist: undefined,
+        navigateFallbackAllowlist: undefined,
+        navigationPreload: undefined,
+        offlineAnalyticsConfigString: undefined,
+        precacheOptionsString,
+        runtimeCaching: runtimeCachingPlaceholder,
+        skipWaiting: undefined,
+      },
+    ]);
   });
 
   it(`should pass the expected options to the template`, function () {
@@ -130,15 +115,14 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
     const precacheOptionsString =
       '{\n  "directoryIndex": "index.html",\n  "ignoreURLParametersMatching": [/a/, /b/]\n}';
 
-    const renderStringStub = sinon.stub().returns('');
+    // There are two stages in templating: creating the active template function
+    // from an initial string, and passing variables to that template function
+    // to get back a final, populated template string.
+    // We need to stub out both of those steps to test the full flow.
+    const templatePopulationStub = sinon.stub().returns('');
+    const templateCreationStub = sinon.stub().returns(templatePopulationStub);
     const {populateSWTemplate} = proxyquire(MODULE_PATH, {
-      'eta': {
-        Eta: class {
-          constructor() {
-            this.renderString = renderStringStub;
-          }
-        },
-      },
+      'lodash/template': templateCreationStub,
       './runtime-caching-converter': {
         runtimeCachingConverter: () => runtimeCachingPlaceholder,
       },
@@ -164,30 +148,30 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
       skipWaiting,
     });
 
-    // Eta receives the template as the first argument: args[0][0]
-    expect(renderStringStub.args[0][0]).to.equal(swTemplate);
+    expect(templateCreationStub.alwaysCalledWith(swTemplate)).to.be.true;
 
-    // The data is passed as the second argument: args[0][1]
-    expect(renderStringStub.args[0][1].use).to.be.a('function');
-    delete renderStringStub.args[0][1].use;
+    // Doing a strict comparison with functions isn't easy.
+    expect(templatePopulationStub.args[0][0].use).to.be.a('function');
+    delete templatePopulationStub.args[0][0].use;
 
-    // Compare the data object directly
-    expect(renderStringStub.args[0][1]).to.eql({
-      cacheId,
-      cleanupOutdatedCaches,
-      clientsClaim,
-      disableDevLogs,
-      importScripts,
-      manifestEntries,
-      navigateFallback,
-      navigateFallbackDenylist,
-      navigateFallbackAllowlist,
-      navigationPreload,
-      offlineAnalyticsConfigString,
-      runtimeCaching: runtimeCachingPlaceholder,
-      precacheOptionsString,
-      skipWaiting,
-    });
+    expect(templatePopulationStub.args[0]).to.eql([
+      {
+        cacheId,
+        cleanupOutdatedCaches,
+        clientsClaim,
+        disableDevLogs,
+        importScripts,
+        manifestEntries,
+        navigateFallback,
+        navigateFallbackDenylist,
+        navigateFallbackAllowlist,
+        navigationPreload,
+        offlineAnalyticsConfigString,
+        runtimeCaching: runtimeCachingPlaceholder,
+        precacheOptionsString,
+        skipWaiting,
+      },
+    ]);
   });
 
   it(`should handle a complex offlineGoogleAnalytics value when populating the template`, function () {
@@ -206,15 +190,10 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
     const offlineAnalyticsConfigString = `{\n\tparameterOverrides: {\n\t\tcd1: 'offline'\n\t},\n\thitFilter: (params) => {\n        \n        params.set('cm1', params.get('qt'));\n      }\n}`;
     const manifestEntries = ['ignored'];
 
-    const renderStringStub = sinon.stub().returns('');
+    const innerStub = sinon.stub().returns('');
+    const outerStub = sinon.stub().returns(innerStub);
     const {populateSWTemplate} = proxyquire(MODULE_PATH, {
-      'eta': {
-        Eta: class {
-          constructor() {
-            this.renderString = renderStringStub;
-          }
-        },
-      },
+      'lodash/template': outerStub,
       './runtime-caching-converter': {
         runtimeCachingConverter: () => runtimeCachingPlaceholder,
       },
@@ -223,26 +202,29 @@ describe(`[workbox-build] lib/populate-sw-template.js`, function () {
 
     populateSWTemplate({manifestEntries, offlineGoogleAnalytics});
 
-    expect(renderStringStub.args[0][0]).to.equal(swTemplate);
+    expect(outerStub.alwaysCalledWith(swTemplate)).to.be.true;
 
-    expect(renderStringStub.args[0][1].use).to.be.a('function');
-    delete renderStringStub.args[0][1].use;
+    // Doing a strict comparison with functions isn't easy.
+    expect(innerStub.args[0][0].use).to.be.a('function');
+    delete innerStub.args[0][0].use;
 
-    expect(renderStringStub.args[0][1]).to.eql({
-      manifestEntries,
-      cacheId: undefined,
-      cleanupOutdatedCaches: undefined,
-      clientsClaim: undefined,
-      disableDevLogs: undefined,
-      importScripts: undefined,
-      navigateFallback: undefined,
-      navigateFallbackDenylist: undefined,
-      navigateFallbackAllowlist: undefined,
-      navigationPreload: undefined,
-      offlineAnalyticsConfigString,
-      precacheOptionsString,
-      runtimeCaching: runtimeCachingPlaceholder,
-      skipWaiting: undefined,
-    });
+    expect(innerStub.args[0]).to.eql([
+      {
+        manifestEntries,
+        cacheId: undefined,
+        cleanupOutdatedCaches: undefined,
+        clientsClaim: undefined,
+        disableDevLogs: undefined,
+        importScripts: undefined,
+        navigateFallback: undefined,
+        navigateFallbackDenylist: undefined,
+        navigateFallbackAllowlist: undefined,
+        navigationPreload: undefined,
+        offlineAnalyticsConfigString,
+        precacheOptionsString,
+        runtimeCaching: runtimeCachingPlaceholder,
+        skipWaiting: undefined,
+      },
+    ]);
   });
 });
